@@ -34,8 +34,8 @@ namespace Tests.CarPark.Domain
             var t1 = lot.Park(new VehicleReg("AAA111"), VehicleSize.SMALL, now);
             var t2 = lot.Park(new VehicleReg("BBB222"), VehicleSize.MEDIUM, now);
 
-            t1.SpaceNumber.Value.Should().Be(1);
-            t2.SpaceNumber.Value.Should().Be(2);
+            t1.Space.Number.Value.Should().Be(1);
+            t2.Space.Number.Value.Should().Be(2);
             lot.OccupiedSpaces.Should().Be(2);
             lot.AvailableSpaces.Should().Be(1);
         }
@@ -87,15 +87,15 @@ namespace Tests.CarPark.Domain
             var result = lot.Exit(new VehicleReg("CAR-1"), outAt, pricing.Object);
 
             result.VehicleReg.Should().Be("CAR-1");
-            result.TimeInUtc.Should().Be(inAt);
-            result.TimeOutUtc.Should().Be(outAt);
+            result.Ticket.TimeInUtc.Should().Be(inAt);
+            result.Ticket.TimeOutUtc.Should().Be(outAt);
             result.VehicleCharge.Amount.Should().Be(3.40m);
 
             lot.OccupiedSpaces.Should().Be(1);
             lot.AvailableSpaces.Should().Be(1);
 
             var t3 = lot.Park(new VehicleReg("CAR-3"), VehicleSize.LARGE, outAt);
-            t3.SpaceNumber.Value.Should().Be(1);
+            t3.Space.Number.Value.Should().Be(1);
 
             pricing.Verify(p => p.Calculate(inAt, outAt, VehicleSize.SMALL), Times.Once);
         }

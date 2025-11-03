@@ -4,32 +4,50 @@ using CarPark.Domain.Events;
 using CarPark.Domain.Exceptions;
 using CarPark.Domain.Services;
 using CarPark.Domain.ValueObjects;
+using System.Collections.ObjectModel;
 
 namespace Parking.Domain.Aggregates.ParkingLot;
 
 public sealed class ParkingLot : AggregateRootBase
 {
-    private readonly SortedSet<int> _freeSpaces;
+    private readonly List<Space> _spaces = new();
     private readonly Dictionary<string, Ticket> _byReg = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<int, Ticket> _bySpace = new();
 
     public Guid Id { get; }
-    public int Capacity { get; }
-    public int OccupiedSpaces => _bySpace.Count;
+    public int Capacity => _spaces.Count;
+    public int OccupiedSpaces => _spaces.Count(s => s.IsOccupied);
     public int AvailableSpaces => Capacity - OccupiedSpaces;
+    public IReadOnlyList<Space> Spaces => _spaces;
 
-    private ParkingLot(Guid id, int capacity)
+    private ParkingLot(Guid id, IEnumerable<Space> spaces)
     {
         Id = id;
-        Capacity = capacity;
-        _freeSpaces = new SortedSet<int>(Enumerable.Range(1, capacity));
+        _spaces.AddRange(spaces);
     }
 
     public static ParkingLot Create(Guid id, int capacity)
     {
         if (capacity <= 0) throw new ValidationException("Capacity must be positive.");
 
-        return new ParkingLot(id, capacity);
+        var spaces = Enumerable.Range(1, capacity).Select(Space.CreateFree).ToList();
+        return new ParkingLot(id, spaces);
+    }
+
+    public static ParkingLot Create(Guid id, IEnumerable<Space> spaces)
+    {
+        var list = spaces?.ToList() ?? throw new ArgumentNullException(nameof(spaces));
+        if (list.Count == 0) throw new ValidationException("Parking lot must have at least one space.");
+        return new ParkingLot(id, list);
+    }
+
+    public static ParkingLot Rehydrate(Guid id, IEnumerable<Space> spaces, IEnumerable<Ticket> tickets)
+    {
+        var lot = new ParkingLot(id, spaces);
+        foreach (var t in tickets.Where(t => t.TimeOutUtc == null))
+        {
+            lot._byReg[t.VehicleReg.Value] = t;
+        }
+        return lot;
     }
 
     public Ticket Park(VehicleReg reg, VehicleSize type, DateTime utcNow)
@@ -40,17 +58,16 @@ public sealed class ParkingLot : AggregateRootBase
         if (_byReg.ContainsKey(reg.Value))
             throw new VehicleAlreadyParkedException(reg.Value);
 
-        if (_freeSpaces.Count == 0)
+        var freeSpace = FindNextFreeSpace();
+        if (freeSpace is null)
             throw new NoSpacesAvailableException();
 
-        var space = _freeSpaces.Min!;
-        _freeSpaces.Remove(space);
+        freeSpace.Occupy(reg.Value);
 
-        var ticket = Ticket.Start(reg, type, SpaceNumber.Create(space), utcNow);
+        var ticket = Ticket.Start(reg, type, freeSpace, utcNow);
         _byReg[reg.Value] = ticket;
-        _bySpace[space] = ticket;
 
-        AddDomainEvent(new VehicleParked(Id, reg.Value, space, utcNow));
+        AddDomainEvent(new VehicleParked(Id, reg.Value, freeSpace.Number.Value, utcNow));
         return ticket;
     }
 
@@ -60,18 +77,38 @@ public sealed class ParkingLot : AggregateRootBase
             throw new VehicleNotFoundException(reg.Value);
 
         ticket.Close(utcNow);
-        var charge = pricing.Calculate(ticket.TimeInUtc, ticket.TimeOutUtc!.Value, ticket.VehicleType);
+        var charge = pricing.Calculate(ticket.TimeInUtc, ticket.TimeOutUtc!.Value, ticket.VehicleSize);
+
+        var space = _spaces.FirstOrDefault(s => s.Number == ticket.Space.Number);
+        if (space is null)
+            throw new InvalidOperationException($"Internal error: space '{ticket.Space.Number.Value}' not found.");
+        if (!space.IsOccupied)
+            throw new InvalidOperationException($"Internal error: space '{ticket.Space.Number.Value}' is already free.");
+
+        space.Vacate();
 
         _byReg.Remove(reg.Value);
-        _bySpace.Remove(ticket.SpaceNumber.Value);
-        _freeSpaces.Add(ticket.SpaceNumber.Value);
 
-        AddDomainEvent(new VehicleExited(Id, reg.Value, ticket.SpaceNumber.Value, ticket.TimeInUtc, ticket.TimeOutUtc!.Value, charge));
+        AddDomainEvent(new VehicleExited(
+            Id,
+            reg.Value,
+            ticket.Space.Number.Value,
+            ticket.TimeInUtc,
+            ticket.TimeOutUtc!.Value,
+            charge));
 
-        return new ExitResult(reg.Value, charge, ticket.TimeInUtc, ticket.TimeOutUtc!.Value);
+        return new ExitResult(reg.Value, charge, ticket);
     }
 
     public (int available, int occupied) Snapshot() => (AvailableSpaces, OccupiedSpaces);
+
+    private Space? FindNextFreeSpace()
+    {
+        return _spaces
+            .Where(s => !s.IsOccupied)
+            .OrderBy(s => s.Number.Value)
+            .FirstOrDefault();
+    }
 }
 
-public sealed record ExitResult(string VehicleReg, Money VehicleCharge, DateTime TimeInUtc, DateTime TimeOutUtc);
+public sealed record ExitResult(string VehicleReg, Money VehicleCharge, Ticket Ticket);

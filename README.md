@@ -29,18 +29,18 @@ https://localhost:5001/swagger
 
 * Domain-Driven Design (DDD)
 
+* Entity Framework (in-memory)
+
 **Assumptions Made**
 
 * Single Parking Lot
 
-* In-memory storage
+* In-memory Entity Framework storage
 
-* No database - data resets when the app restarts
+* Data resets when the app restarts
 
 * Vehicles are uniquely identified by registration (VehicleReg)
 
 * Configurable via appsettings.json → "Pricing" section
-
-* Allows deterministic test time simulation
 
 * Always uses the first available (lowest number) space

@@ -17,18 +17,19 @@ namespace Tests.CarPark.Application
         [InlineData("medium", VehicleSize.MEDIUM, 10, 1)]
         [InlineData("Large", VehicleSize.LARGE, 3, 1)]
         public async Task Handle_ShouldParkVehicle_AndReturnMappedResult(
-            string vehicleSizeString, VehicleSize expectedEnum, int capacity, int expectedSpace)
+            string vehicleSizeString, VehicleSize expectedVehicleSize, int capacity, int expectedSpace)
         {
             // Arrange
             var reg = "ABC123";
             var fixedNow = new DateTime(2025, 01, 01, 12, 34, 56, DateTimeKind.Utc);
 
             var lot = ParkingLot.Create(Guid.NewGuid(), capacity);
+            var ticket = Ticket.Start(new VehicleReg(reg), expectedVehicleSize, lot.Spaces.OrderBy(s => s.Number.Value).First(), fixedNow);
 
             var repo = new Mock<IParkingLotRepository>();
             repo.Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(lot);
-            repo.Setup(r => r.SaveAsync(lot, It.IsAny<CancellationToken>()))
+            repo.Setup(r => r.SaveAsync(lot, ticket, It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var clock = new Mock<IClock>();
@@ -53,16 +54,19 @@ namespace Tests.CarPark.Application
             lot.AvailableSpaces.Should().Be(capacity - 1);
 
             repo.Verify(r => r.GetAsync(It.IsAny<CancellationToken>()), Times.Once);
-            repo.Verify(r => r.SaveAsync(lot, It.IsAny<CancellationToken>()), Times.Once);
-
-            mediator.Verify(m => m.Publish(
-                    It.Is<INotification>(n => n.GetType().Name.Contains("VehicleParked")),
-                    It.IsAny<CancellationToken>()),
-                Times.AtLeastOnce);
+            repo.Verify(r => r.SaveAsync(
+                It.IsAny<ParkingLot>(),
+                It.Is<Ticket>(t =>
+                    t.VehicleReg.Value == reg &&
+                    t.VehicleSize == expectedVehicleSize &&
+                    t.Space.Number.Value == expectedSpace &&
+                    t.TimeInUtc == fixedNow),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
 
             await FluentActions.Invoking(async () =>
             {
-                lot.Park(new VehicleReg(reg), expectedEnum, fixedNow);
+                lot.Park(new VehicleReg(reg), expectedVehicleSize, fixedNow);
                 await Task.CompletedTask;
             }).Should().ThrowAsync<VehicleAlreadyParkedException>();
         }
@@ -93,7 +97,7 @@ namespace Tests.CarPark.Application
                 .WithMessage("Unknown VehicleType*");
 
             repo.Verify(r => r.GetAsync(It.IsAny<CancellationToken>()), Times.Never);
-            repo.Verify(r => r.SaveAsync(It.IsAny<ParkingLot>(), It.IsAny<CancellationToken>()), Times.Never);
+            repo.Verify(r => r.SaveAsync(It.IsAny<ParkingLot>(), It.IsAny<Ticket>(), It.IsAny<CancellationToken>()), Times.Never);
             mediator.Verify(m => m.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
         }
     }

@@ -22,15 +22,15 @@ namespace CarPark.Application.Parking.ExitVehicle
 
             var exit = lot.Exit(new VehicleReg(req.VehicleReg), _clock.UtcNow, _pricing);
 
-            await _repo.SaveAsync(lot, ct);
+            await _repo.SaveAsync(lot, exit.Ticket, ct);
 
             await DomainEventPublisher.PublishAndClearAsync(_mediator, ct, lot);
 
             return new ExitVehicleResult(
                 VehicleReg: exit.VehicleReg,
                 VehicleCharge: exit.VehicleCharge.Amount,
-                TimeInUtc: exit.TimeInUtc,
-                TimeOutUtc: exit.TimeOutUtc);
+                TimeInUtc: exit.Ticket.TimeInUtc,
+                TimeOutUtc: exit.Ticket.TimeOutUtc!.Value);
         }
     }
 }

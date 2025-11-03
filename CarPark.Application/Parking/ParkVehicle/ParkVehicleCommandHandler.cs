@@ -24,10 +24,10 @@ namespace CarPark.Application.Parking.ParkVehicle
 
             var ticket = lot.Park(new VehicleReg(command.VehicleReg), type, _clock.UtcNow);
 
-            await _repo.SaveAsync(lot, ct);                               
+            await _repo.SaveAsync(lot, ticket, ct);                               
             await DomainEventPublisher.PublishAndClearAsync(_mediator, ct, lot);
 
-            return new(ticket.VehicleReg.Value, ticket.SpaceNumber.Value, ticket.TimeInUtc);
+            return new(ticket.VehicleReg.Value, ticket.Space.Number.Value, ticket.TimeInUtc);
         }
     }
 }

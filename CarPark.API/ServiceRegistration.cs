@@ -4,6 +4,9 @@ using CarPark.Domain.Aggregates.ParkingLot;
 using CarPark.Domain.Services;
 using CarPark.Infrastructure;
 using CarPark.Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using System;
 
 namespace CarPark.API
 {
@@ -17,7 +20,7 @@ namespace CarPark.API
 
             services.AddPricingService(config);
 
-            services.AddSingleton<IParkingLotRepository, ParkingLotRepository>();
+            services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
             services.AddSingleton<IClock, SystemClock>();
 
             return services;

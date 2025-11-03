@@ -25,12 +25,12 @@ namespace Tests.CarPark.Application
             var timeOut = timeIn.AddMinutes(minutesParked);
 
             var lot = ParkingLot.Create(Guid.NewGuid(), capacity: 50);
-            lot.Park(new VehicleReg(reg), vehicleSize, timeIn);
+            var ticket = lot.Park(new VehicleReg(reg), vehicleSize, timeIn);
 
             var repo = new Mock<IParkingLotRepository>();
             repo.Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(lot);
-            repo.Setup(r => r.SaveAsync(lot, It.IsAny<CancellationToken>()))
+            repo.Setup(r => r.SaveAsync(lot, ticket, It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var clock = new Mock<IClock>();
@@ -59,7 +59,7 @@ namespace Tests.CarPark.Application
             result.TimeOutUtc.Should().Be(timeOut);
 
             repo.Verify(r => r.GetAsync(It.IsAny<CancellationToken>()), Times.Once);
-            repo.Verify(r => r.SaveAsync(lot, It.IsAny<CancellationToken>()), Times.Once);
+            repo.Verify(r => r.SaveAsync(lot, ticket, It.IsAny<CancellationToken>()), Times.Once);
             pricing.Verify(p => p.Calculate(timeIn, timeOut, vehicleSize), Times.Once);
         }
 
@@ -89,7 +89,7 @@ namespace Tests.CarPark.Application
             await act.Should().ThrowAsync<VehicleNotFoundException>();
 
             repo.Verify(r => r.GetAsync(It.IsAny<CancellationToken>()), Times.Once);
-            repo.Verify(r => r.SaveAsync(It.IsAny<ParkingLot>(), It.IsAny<CancellationToken>()), Times.Never);
+            repo.Verify(r => r.SaveAsync(It.IsAny<ParkingLot>(), It.IsAny<Ticket>(), It.IsAny<CancellationToken>()), Times.Never);
             mediator.Verify(m => m.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
             pricing.VerifyNoOtherCalls();
         }

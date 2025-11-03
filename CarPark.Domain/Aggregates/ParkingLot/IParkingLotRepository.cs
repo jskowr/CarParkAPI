@@ -5,6 +5,6 @@ namespace CarPark.Domain.Aggregates.ParkingLot
     public interface IParkingLotRepository
     {
         Task<DomainParkingLot> GetAsync(CancellationToken ct);
-        Task SaveAsync(DomainParkingLot lot, CancellationToken ct);
+        Task SaveAsync(DomainParkingLot lot, Ticket ticket, CancellationToken ct);
     }
 }
